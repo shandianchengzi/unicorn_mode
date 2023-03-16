@@ -1,30 +1,26 @@
 #!/bin/sh
 #
-# american fuzzy lop++ - unicorn mode build script
-# ------------------------------------------------
+# EDG says: This script slightly tweaked to make installation more smooth
 #
-# Originally written by Nathan Voss <njvoss99@gmail.com>
+# american fuzzy lop - Unicorn-Mode build script
+# --------------------------------------
 #
+# Written by Nathan Voss <njvoss99@gmail.com>
+# 
 # Adapted from code by Andrew Griffiths <agriffiths@google.com> and
-#                      Michal Zalewski
-#
-# Adapted for AFLplusplus by Dominik Maier <mail@dmnk.co>
-#
-# CompareCoverage and NeverZero counters by Andrea Fioraldi
-#                                <andreafioraldi@gmail.com>
+#                      Michal Zalewski <lcamtuf@google.com>
 #
 # Copyright 2017 Battelle Memorial Institute. All rights reserved.
-# Copyright 2019-2022 AFLplusplus Project. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at:
 #
-#   https://www.apache.org/licenses/LICENSE-2.0
+#   http://www.apache.org/licenses/LICENSE-2.0
 #
 # This script downloads, patches, and builds a version of Unicorn with
 # minor tweaks to allow Unicorn-emulated binaries to be run under
-# afl-fuzz.
+# afl-fuzz. 
 #
 # The modifications reside in patches/*. The standalone Unicorn library
 # will be written to /usr/lib/libunicornafl.so, and the Python bindings
@@ -33,28 +29,44 @@
 # You must make sure that Unicorn Engine is not already installed before
 # running this script. If it is, please uninstall it first.
 
-sudo apt remove cmake -y
-sudo snap install cmake --classic
-
-UNICORNAFL_VERSION="$(cat ./UNICORNAFL_VERSION)"
+UNICORN_URL="https://github.com/unicorn-engine/unicorn/archive/1.0.3.tar.gz"
 
 echo "================================================="
-echo "UnicornAFL build script"
+echo "Unicorn-AFL build script"
 echo "================================================="
 echo
 
 echo "[*] Performing basic sanity checks..."
 
-PLT=`uname -s`
+#if [ "$(id -u)" != "0" ]; then
+#
+#   echo "[-] Error: This script must be run as root/sudo" 
+#   exit 1
+#
+#fi
 
-if [ ! "$PLT" = "Linux" ] && [ ! "$PLT" = "Darwin" ] && [ ! "$PLT" = "FreeBSD" ] && [ ! "$PLT" = "NetBSD" ] && [ ! "$PLT" = "OpenBSD" ] && [ ! "$PLT" = "DragonFly" ]; then
+if [ ! "`uname -s`" = "Linux" ]; then
 
-  echo "[-] Error: Unicorn instrumentation is unsupported on $PLT."
+  echo "[-] Error: Unicorn instrumentation is supported only on Linux."
   exit 1
 
 fi
 
-if [ ! -f "../config.h" ]; then
+ldconfig -p | grep libunicorn > /dev/null;
+if [ $? -eq 0 ]; then
+
+  echo -n "[?] Unicorn Engine appears to already be installed on the system. Continuing will overwrite the existing installation. Continue (y/n)?"
+  
+  read answer
+  if ! echo "$answer" | grep -iq "^y" ;then
+
+    exit 1
+
+  fi
+
+fi
+
+if [ ! -f "patches/afl-unicorn-cpu-inl.h" -o ! -f "../config.h" ]; then
 
   echo "[-] Error: key files not found - wrong working directory?"
   exit 1
@@ -68,178 +80,99 @@ if [ ! -f "../afl-showmap" ]; then
 
 fi
 
-PYTHONBIN=`command -v python3 || command -v python || command -v python2 || echo python3`
-MAKECMD=make
-TARCMD=tar
+for i in wget python automake autoconf sha384sum; do
 
-if [ "$PLT" = "Linux" ]; then
-  MUSL=`ldd --version 2>&1 | head -n 1 | cut -f 1 -d " "`
-  if [ "musl" = $MUSL ]; then
-  	echo "[-] Error: Unicorn instrumentation is unsupported with the musl's libc."
-  	exit 1
-  fi
-  CORES=`nproc`
-fi
-
-if [ "$PLT" = "Darwin" ]; then
-  CORES=`sysctl -n hw.ncpu`
-  TARCMD=tar
-fi
-
-if [ "$PLT" = "FreeBSD" ]; then
-  MAKECMD=gmake
-  CORES=`sysctl -n hw.ncpu`
-  TARCMD=gtar
-fi
-
-if [ "$PLT" = "DragonFly" ]; then
-  MAKECMD=gmake
-  CORES=`sysctl -n hw.ncpu`
-  TARCMD=tar
-fi
-
-if [ "$PLT" = "NetBSD" ] || [ "$PLT" = "OpenBSD" ]; then
-  MAKECMD=gmake
-  CORES=`sysctl -n hw.ncpu`
-  TARCMD=gtar
-fi
-
-PREREQ_NOTFOUND=
-for i in $PYTHONBIN automake autoconf git $MAKECMD $TARCMD; do
-
-  T=`command -v "$i" 2>/dev/null`
+  T=`which "$i" 2>/dev/null`
 
   if [ "$T" = "" ]; then
 
-    echo "[-] Error: '$i' not found. Run 'sudo apt-get install $i' or similar."
-    PREREQ_NOTFOUND=1
+    echo "[-] Error: '$i' not found. Run 'sudo apt-get install $i'."
+    exit 1
 
   fi
 
 done
 
-# some python version should be available now
-PYTHONS="`command -v python3` `command -v python` `command -v python2`"
-SETUPTOOLS_FOUND=0
-for PYTHON in $PYTHONS ; do
+# EDG: easy_install?? What are we? Cavepeople?
+#if ! which easy_install > /dev/null; then
+#
+#  echo "[-] Error: Python setup-tools not found. Run 'sudo apt-get install python-setuptools'."
+#  exit 1
 
-  if $PYTHON -c "import setuptools" ; then
-
-    SETUPTOOLS_FOUND=1
-    PYTHONBIN=$PYTHON
-    break
-
-  fi
-
-done
-if [ "0" = $SETUPTOOLS_FOUND ]; then
-
-  echo "[-] Error: Python setup-tools not found. Run 'sudo apt-get install python-setuptools', or install python3-setuptools, or run '$PYTHONBIN -m ensurepip', or create a virtualenv, or ..."
-  PREREQ_NOTFOUND=1
-
-fi
+#fi
 
 if echo "$CC" | grep -qF /afl-; then
 
   echo "[-] Error: do not use afl-gcc or afl-clang to compile this tool."
-  PREREQ_NOTFOUND=1
-
-fi
-
-if [ "$PREREQ_NOTFOUND" = "1" ]; then
   exit 1
-fi
 
-unset CFLAGS
+fi
 
 echo "[+] All checks passed!"
 
-echo "[*] Making sure unicornafl is checked out"
+wget $UNICORN_URL
 
-git status 1>/dev/null 2>/dev/null
-if [ $? -eq 0 ]; then
-  echo "[*] initializing unicornafl submodule"
-  git submodule init || exit 1
-  git submodule update ./unicornafl 2>/dev/null # ignore errors
-  git submodule sync ./unicornafl 2>/dev/null # ignore errors
-else
-  echo "[*] cloning unicornafl"
-  test -d unicornafl/.git || {
-    CNT=1
-    while [ '!' -d unicornafl/.git -a "$CNT" -lt 4 ]; do
-      echo "Trying to clone unicornafl (attempt $CNT/3)"
-      git clone https://github.com/AFLplusplus/unicornafl
-      CNT=`expr "$CNT" + 1`
-    done
-  }
-fi
+ARCHIVE="`basename -- "$UNICORN_URL"`"
 
-test -e unicornafl/.git || { echo "[-] not checked out, please install git or check your internet connection." ; exit 1 ; }
-echo "[+] Got unicornafl."
+CKSUM=`sha384sum -- "$ARCHIVE" 2>/dev/null | cut -d' ' -f1`
 
-cd "unicornafl" || exit 1
-echo "[*] Checking out $UNICORNAFL_VERSION"
-git pull
-sh -c 'git stash && git stash drop' 1>/dev/null 2>/dev/null
-git reset --soft "$UNICORNAFL_VERSION" || exit 1
+echo "[*] Uncompressing archive (this will take a while)..."
 
-# echo "[*] making sure afl++ header files match"
-# cp "../../include/config.h" "./include" || exit 1
+rm -rf "unicorn-1.0.3" || exit 1
+tar xzf "$ARCHIVE" || exit 1
+
+echo "[+] Unpacking successful."
+
+# rm -rf "$ARCHIVE" || exit 1
+
+echo "[*] Applying patches..."
+
+cd "unicorn-1.0.3" && patch -p1 <../patches/commit.patch && cd .. || exit 1
+
+echo "[+] Patching done."
 
 echo "[*] Configuring Unicorn build..."
 
+cd "unicorn-1.0.3" || exit 1
+
+# No custom config necessary at the moment. Consider optimizations.
+#CFLAGS="-O3" ./configure || exit 1
+
 echo "[+] Configuration complete."
 
-echo "[*] Attempting to build unicornafl (fingers crossed!)..."
+echo "[*] Attempting to build Unicorn (fingers crossed!)..."
 
-$MAKECMD clean  # make doesn't seem to work for unicorn
-# Fixed to 1 core for now as there is a race condition in the makefile
-$MAKECMD -j1 || exit 1
+make || exit 1
 
 echo "[+] Build process successful!"
 
-echo "[*] Installing Unicorn python bindings..."
-cd unicorn/bindings/python || exit 1
-if [ -z "$VIRTUAL_ENV" ]; then
-  echo "[*] Info: Installing python unicornafl using --user"
-  THREADS=$CORES $PYTHONBIN setup.py install --user --force --prefix=|| exit 1
-else
-  echo "[*] Info: Installing python unicornafl to virtualenv: $VIRTUAL_ENV"
-  THREADS=$CORES $PYTHONBIN setup.py install --force || exit 1
-fi
-cd ../../../
+echo "[*] Installing patched unicorn binaries to local system..."
 
-echo "[*] Installing Unicornafl python bindings..."
+make && sudo make install || exit 1
+
+echo "[+] Unicorn installed successfully."
+
+echo "[*] Building Unicorn python bindings..."
+
 cd bindings/python || exit 1
-if [ -z "$VIRTUAL_ENV" ]; then
-  echo "[*] Info: Installing python unicornafl using --user"
-  THREADS=$CORES $PYTHONBIN setup.py install --user --force --prefix=|| exit 1
-else
-  echo "[*] Info: Installing python unicornafl to virtualenv: $VIRTUAL_ENV"
-  THREADS=$CORES $PYTHONBIN setup.py install --force || exit 1
-fi
-echo '[*] If needed, you can (re)install the bindings from `./unicornafl/bindings/python` using `python setup.py install`'
-
+python3 setup.py install || exit 1
 cd ../../ || exit 1
 
-echo "[*] Unicornafl bindings installed successfully."
+echo "[+] Unicorn Python bindings installed successfully"
 
 # Compile the sample, run it, verify that it works!
-echo "[*] Testing unicornafl python functionality by running a sample test harness"
+echo "[*] Testing unicorn-mode functionality by running a sample test harness under afl-unicorn"
 
-cd ../samples/python_simple || echo "Cannot cd"
+cd ../samples/simple || exit 1
 
 # Run afl-showmap on the sample application. If anything comes out then it must have worked!
 unset AFL_INST_RATIO
-# pwd; echo "echo 0 | ../../../afl-showmap -U -m none -t 2000 -o ./.test-instr0 -- $PYTHONBIN ./simple_test_harness.py ./sample_inputs/sample1.bin"
-echo 0 | ../../../afl-showmap -U -m none -t 2000 -o ./.test-instr0 -- $PYTHONBIN ./simple_test_harness.py ./sample_inputs/sample1.bin >/dev/null 2>&1 || echo "Showmap"
+echo 0 | ../../../afl-showmap -U -m none -q -o .test-instr0 -- python3 simple_test_harness.py ./sample_inputs/sample1.bin || exit 1
 
-if [ -s ./.test-instr0 ]
+if [ -s .test-instr0 ]
 then
-
+  
   echo "[+] Instrumentation tests passed. "
-  echo '[+] Make sure to adapt older scripts to `import unicornafl` and use `uc.afl_forkserver_start`'
-  echo '    or `uc.afl_fuzz` to kick off fuzzing.'
   echo "[+] All set, you can now use Unicorn mode (-U) in afl-fuzz!"
   RETVAL=0
 
@@ -250,6 +183,6 @@ else
 
 fi
 
-rm -f ./.test-instr0
+rm -f .test-instr0
 
 exit $RETVAL

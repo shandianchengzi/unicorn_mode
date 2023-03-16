@@ -1,4 +1,5 @@
-# Compiling simple_target.c
+Compiling simple_target.c
+==========================
 
 You shouldn't need to compile simple_target.c since a MIPS binary version is
 pre-built and shipped with afl-unicorn. This file documents how the binary
