@@ -54,7 +54,7 @@
       afl_forkserver(env); \
       afl_first_instr = 1; \
     } \
-    afl_maybe_log(tb->pc); \
+    afl_maybe_log(tcg_ctx, tb->pc); \
   } while (0)
 
 /* We use one additional file descriptor to relay "needs translation"
@@ -79,7 +79,7 @@ static unsigned int afl_inst_rms = MAP_SIZE;
 
 static void afl_setup(void);
 static void afl_forkserver(CPUArchState*);
-static inline void afl_maybe_log(unsigned long);
+static inline void afl_maybe_log(TCGContext *, unsigned long);
 
 static void afl_wait_tsl(CPUArchState*, int);
 static void afl_request_tsl(target_ulong, target_ulong, uint64_t);
@@ -204,9 +204,12 @@ static void afl_forkserver(CPUArchState *env) {
 
 /* The equivalent of the tuple logging routine from afl-as.h. */
 
-static inline void afl_maybe_log(unsigned long cur_loc) {
+static inline void afl_maybe_log(TCGContext *ctx, unsigned long cur_loc) {
 
   static __thread unsigned long prev_loc;
+  // static __thread TCGv_i32 index, count, new_prev_loc;
+  // static __thread TCGv_ptr prev_loc_ptr, count_ptr, cur_loc_ptr;
+  // static __thread FILE* f;
 
   // DEBUG
   //printf("IN AFL_MAYBE_LOG 0x%lx\n", cur_loc);
@@ -234,11 +237,39 @@ static inline void afl_maybe_log(unsigned long cur_loc) {
 
   if (cur_loc >= afl_inst_rms) return;
 
-  // DEBUG
-  //printf("cur_loc = 0x%lx\n", cur_loc);  
+  // f = fopen("/home/shandian/Unicorn_test/output_fuzz_info.txt", "a");
+
+  // fprintf(f, "[+] index = prev_loc[%lu] ^ cur_loc[%lu]\n", prev_loc, cur_loc);
+
+  // /* index = prev_loc ^ cur_loc */
+  // prev_loc_ptr = tcg_const_ptr(ctx, &prev_loc);
+  // index = tcg_temp_new_i32(ctx);
+  // tcg_gen_ld_i32(ctx, index, prev_loc_ptr, 0);
+  // tcg_gen_xori_i32(ctx, index, index, cur_loc);
+
+  // /* afl_area_ptr[index]++ */
+  // count_ptr = tcg_const_ptr(ctx, afl_area_ptr);
+  // tcg_gen_add_ptr(ctx, count_ptr, count_ptr, MAKE_TCGV_PTR(GET_TCGV_I32(index)));
+  // tcg_temp_free_i32(ctx, index);
+  // count = tcg_temp_new_i32(ctx);
+  // tcg_gen_ld8u_i32(ctx, count, count_ptr, 0);
+  // tcg_gen_addi_i32(ctx, count, count, 1);
+  // tcg_gen_st8_i32(ctx, count, count_ptr, 0);
+  // tcg_temp_free_i32(ctx, count);
 
   afl_area_ptr[cur_loc ^ prev_loc]++;
+
+  // fprintf(f, "[+] prev_loc[%lu] = cur_loc[%lu] >> 1\n", prev_loc, cur_loc);
+
+  /* prev_loc = cur_loc >> 1 */
+  // new_prev_loc = tcg_const_i32(ctx, cur_loc >> 1);
+  // tcg_gen_st_i32(ctx, new_prev_loc, prev_loc_ptr, 0);
+
   prev_loc = cur_loc >> 1;
+
+  // // DEBUG
+  // printf("cur_loc = 0x%lx\n", cur_loc);  
+  // fclose(f);
 
 }
 

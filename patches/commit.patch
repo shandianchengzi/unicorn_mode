@@ -39,10 +39,15 @@ index a0fd83e..5a0c81f 100644
  
      //> alias registers
 diff --git a/qemu/cpu-exec.c b/qemu/cpu-exec.c
-index b955964..47c4fb7 100644
+index b955964..7c39cc1 100644
 --- a/qemu/cpu-exec.c
 +++ b/qemu/cpu-exec.c
-@@ -24,6 +24,9 @@
+@@ -20,10 +20,14 @@
+ /* Modified for Unicorn Engine by Nguyen Anh Quynh, 2015 */
+ 
+ #include "tcg.h"
++#include "tcg-op.h"
+ #include "sysemu/sysemu.h"
  
  #include "uc_priv.h"
  
@@ -52,7 +57,7 @@ index b955964..47c4fb7 100644
  static tcg_target_ulong cpu_tb_exec(CPUState *cpu, uint8_t *tb_ptr);
  static TranslationBlock *tb_find_slow(CPUArchState *env, target_ulong pc,
          target_ulong cs_base, uint64_t flags);
-@@ -246,6 +249,8 @@ int cpu_exec(struct uc_struct *uc, CPUArchState *env)   // qq
+@@ -246,6 +250,8 @@ int cpu_exec(struct uc_struct *uc, CPUArchState *env)   // qq
                              next_tb & TB_EXIT_MASK, tb);
                  }
  
@@ -61,7 +66,7 @@ index b955964..47c4fb7 100644
                  /* cpu_interrupt might be called while translating the
                     TB, but before it is linked into a potentially
                     infinite loop and becomes env->current_tb. Avoid
-@@ -416,6 +421,8 @@ not_found:
+@@ -416,6 +422,8 @@ not_found:
          return NULL;
      }
  
