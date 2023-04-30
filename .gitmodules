@@ -1,0 +1,3 @@
+[submodule "unicornafl"]
+	path = unicornafl
+	url = https://github.com/AFLplusplus/unicornafl
